@@ -50,6 +50,7 @@ export component AppWindow inherits Window {
     in-out property <string> time_elapsed: "0:00";
     in-out property <string> time_remaining: "-0:00";
     in-out property <bool> lyrics_active: false;
+    in-out property <int> active_lyric_idx: 0;
     in-out property <bool> queue_open: false;
     in-out property <float> volume: 0.8;
     
@@ -324,19 +325,21 @@ export component AppWindow inherits Window {
                             }
                         }
                         
-                        // Rolagem contínua de letras estilo karaokê
-                        ScrollView {
+                        // Rolagem contínua de letras estilo karaokê Apple Music
+                        lyrics_scroll := ScrollView {
                             horizontal-stretch: 1;
                             vertical-stretch: 1;
+                            viewport-y: -Math.max(0px, root.active_lyric_idx * 54px - 160px);
+                            animate viewport-y { duration: 350ms; easing: ease-out; }
                             
                             VerticalLayout {
                                 spacing: 18px;
                                 padding-left: 48px;
                                 padding-right: 64px;
                                 padding-top: 20px;
-                                padding-bottom: 120px;
+                                padding-bottom: 240px;
                                 
-                                for line in root.lyrics: lyric_line_touch := TouchArea {
+                                for line[idx] in root.lyrics: lyric_line_touch := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
                                         root.seek_lyric(line.timestamp_ms);
@@ -347,13 +350,13 @@ export component AppWindow inherits Window {
                                         width: 100%;
                                         wrap: word-wrap;
                                         horizontal-alignment: left;
-                                        font-size: line.is_active ? 36px : (lyric_line_touch.has-hover ? 26px : 24px);
-                                        font-weight: line.is_active ? 800 : 600;
-                                        color: line.is_active ? #ffffff : (lyric_line_touch.has-hover ? #ffffff : #a0a0a0);
-                                        opacity: line.is_active ? 1.0 : (lyric_line_touch.has-hover ? 0.8 : 0.4);
-                                        animate font-size { duration: 200ms; }
-                                        animate opacity { duration: 200ms; }
-                                        animate color { duration: 150ms; }
+                                        font-size: (idx == root.active_lyric_idx) ? 36px : (lyric_line_touch.has-hover ? 26px : 24px);
+                                        font-weight: (idx == root.active_lyric_idx) ? 800 : 600;
+                                        color: (idx == root.active_lyric_idx) ? #ffffff : (lyric_line_touch.has-hover ? #ffffff : #a0a0a0);
+                                        opacity: (idx == root.active_lyric_idx) ? 1.0 : (lyric_line_touch.has-hover ? 0.8 : 0.35);
+                                        animate font-size { duration: 250ms; }
+                                        animate opacity { duration: 250ms; }
+                                        animate color { duration: 250ms; }
                                     }
                                 }
                             }

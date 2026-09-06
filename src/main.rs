@@ -425,20 +425,7 @@ async fn main() -> Result<()> {
 
                                 if state.active_lyric_idx != Some(active_idx) {
                                     state.active_lyric_idx = Some(active_idx);
-
-                                    // Atualiza modelo de letras no Slint
-                                    let lyric_items: Vec<LyricItem> = state
-                                        .lyrics
-                                        .iter()
-                                        .enumerate()
-                                        .map(|(i, l)| LyricItem {
-                                            text: l.text.clone().into(),
-                                            timestamp_ms: l.timestamp_ms as i32,
-                                            is_active: i == active_idx,
-                                        })
-                                        .collect();
-
-                                    app.set_lyrics(ModelRc::from(Rc::new(VecModel::from(lyric_items))));
+                                    app.set_active_lyric_idx(active_idx as i32);
                                 }
                             }
                         }
@@ -684,6 +671,7 @@ async fn main() -> Result<()> {
                             state.lyrics = parsed;
                             state.active_lyric_idx = Some(0);
                             if let Some(app) = app_w_inner.upgrade() {
+                                app.set_active_lyric_idx(0);
                                 app.set_lyrics(ModelRc::from(Rc::new(VecModel::from(lyric_items))));
                             }
                         });
@@ -697,6 +685,7 @@ async fn main() -> Result<()> {
                             state.lyrics.clear();
                             state.active_lyric_idx = None;
                             if let Some(app) = app_w_inner.upgrade() {
+                                app.set_active_lyric_idx(0);
                                 app.set_lyrics(ModelRc::from(Rc::new(VecModel::from(vec![
                                     LyricItem {
                                         text: "Letras não disponíveis para esta faixa".into(),
