@@ -20,6 +20,7 @@ export component TopPlayer inherits Rectangle {
     in-out property <bool> lyrics_active: false;
     in-out property <bool> queue_open: false;
     in-out property <float> volume: 0.8;
+    property <float> prev_volume: 0.8;
     
     callback toggle_play_pause();
     callback play_pause();
@@ -353,45 +354,65 @@ export component TopPlayer inherits Rectangle {
             // Controle de Volume
             HorizontalLayout {
                 spacing: 8px;
-                alignment: center;
+                y: (parent.height - self.height) / 2;
+                height: 24px;
                 
-                Rectangle {
-                    width: 20px;
-                    height: 20px;
-                    Image {
-                        source: (root.volume <= 0.01) 
-                            ? @image-url("assets/icons/volume-mute.svg") 
-                            : (root.volume < 0.5 ? @image-url("assets/icons/volume-low.svg") : @image-url("assets/icons/volume-high.svg"));
-                        colorize: vol_touch.has-hover ? text-color : text-muted;
-                        width: 14px;
-                        height: 14px;
-                        x: (parent.width - self.width) / 2;
-                        y: (parent.height - self.height) / 2;
-                        animate colorize { duration: 150ms; }
+                // Botão Mute / Desmute Interativo
+                mute_touch := TouchArea {
+                    width: 24px;
+                    height: 24px;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        if (root.volume > 0.01) {
+                            root.prev_volume = root.volume;
+                            root.set_volume(0.0);
+                        } else {
+                            root.set_volume(root.prev_volume > 0.05 ? root.prev_volume : 0.5);
+                        }
+                    }
+                    
+                    Rectangle {
+                        border-radius: 4px;
+                        background: mute_touch.has-hover ? #ffffff10 : transparent;
+                        animate background { duration: 150ms; }
+                        
+                        Image {
+                            source: (root.volume <= 0.01) 
+                                ? @image-url("assets/icons/volume-mute.svg") 
+                                : (root.volume < 0.5 ? @image-url("assets/icons/volume-low.svg") : @image-url("assets/icons/volume-high.svg"));
+                            colorize: (mute_touch.has-hover || vol_touch.has-hover) ? text-color : text-muted;
+                            width: 14px;
+                            height: 14px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            animate colorize { duration: 150ms; }
+                        }
                     }
                 }
                 
+                // Slider de Volume Estilo Apple Music
                 vol_touch := TouchArea {
-                    width: 76px;
-                    height: 20px;
+                    width: 80px;
+                    height: 24px;
                     mouse-cursor: pointer;
                     moved => {
                         if (self.pressed) {
+                            root.prev_volume = Math.max(0.05, Math.min(1.0, self.mouse-x / self.width));
                             root.set_volume(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
                         }
                     }
                     clicked => {
+                        root.prev_volume = Math.max(0.05, Math.min(1.0, self.mouse-x / self.width));
                         root.set_volume(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
                     }
                     
                     Rectangle {
-                        y: vol_touch.has-hover ? 7px : 8px;
+                        y: (parent.height - self.height) / 2;
                         width: parent.width;
                         height: vol_touch.has-hover ? 6px : 4px;
                         background: #3c3c44;
                         border-radius: 2px;
                         animate height { duration: 100ms; }
-                        animate y { duration: 100ms; }
                         
                         Rectangle {
                             width: Math.max(0px, Math.min(parent.width, parent.width * root.volume));
