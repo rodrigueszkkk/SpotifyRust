@@ -153,6 +153,7 @@ export component QueuePanel inherits Rectangle {
                     width: 100%;
                     border-radius: Theme.radius-control;
                     background: item_touch.has-hover ? Theme.surface-hover : Colors.transparent;
+                    animate background { duration: 120ms; }
 
                     item_touch := TouchArea {
                         mouse-cursor: pointer;
