@@ -12,6 +12,7 @@ export component AppWindow inherits Window {
     height: 800px;
     background: Theme.background-base;
     default-font-family: Theme.default-font-family;
+    forward-focus: key_handler;
 
     // Paleta Oficial Apple Music Dark Mode
     in-out property <color> accent-color: Theme.accent;
@@ -103,6 +104,38 @@ export component AppWindow inherits Window {
         background: @linear-gradient(180deg, #161618a0 0%, #161618f5 100%);
     }
 
+    key_handler := FocusScope {
+        x: 0px;
+        y: 0px;
+        width: 0px;
+        height: 0px;
+        key-pressed(event) => {
+            // Tecla Escape: se a busca estiver focada, limpa a busca e restaura o foco global
+            if (event.text == Key.Escape) {
+                if (sidebar.search_has_focus) {
+                    sidebar.clear_search_text();
+                    root.search_changed("");
+                    key_handler.focus();
+                    return accept;
+                }
+                if (root.queue_open) {
+                    root.toggle_queue();
+                    return accept;
+                }
+                if (root.lyrics_active || root.current_view == "lyrics") {
+                    root.toggle_lyrics();
+                    return accept;
+                }
+            }
+            // Tecla Espaço: Play / Pause (ignora se estiver digitando na busca)
+            if (event.text == " " && !sidebar.search_has_focus) {
+                root.toggle_play_pause();
+                return accept;
+            }
+            reject
+        }
+    }
+
     VerticalLayout {
             // 1. Barra Superior Fixa do Player
             TopPlayer {
@@ -138,7 +171,7 @@ export component AppWindow inherits Window {
             
             // 2. Área Central (Sidebar + Conteúdo Principal)
             HorizontalLayout {
-                Sidebar {
+                sidebar := Sidebar {
                     accent-color: root.accent-color;
                     text-color: root.text-color;
                     text-muted: root.text-muted;
@@ -146,10 +179,12 @@ export component AppWindow inherits Window {
                     playlists: root.playlists;
                     
                     navigate(sec) => {
+                        key_handler.focus();
                         root.active_nav = sec;
                         root.navigate(sec);
                     }
                     select_playlist(id) => {
+                        key_handler.focus();
                         root.active_nav = id;
                         root.select_playlist(id);
                     }
@@ -158,6 +193,9 @@ export component AppWindow inherits Window {
                             root.active_nav = "";
                         }
                         root.search_changed(q);
+                    }
+                    search_submitted => {
+                        key_handler.focus();
                     }
                 }
                 
@@ -168,6 +206,12 @@ export component AppWindow inherits Window {
                         ? @linear-gradient(180deg, root.dynamic_color_top 0%, root.dynamic_color_bottom 100%) 
                         : (root.has_ambient_art ? transparent : Theme.background-base);
                     clip: true;
+                    // Clique no fundo devolve o foco para a janela global
+                    TouchArea {
+                        clicked => {
+                            key_handler.focus();
+                        }
+                    }
 
                     // Banner de Conexão / Autenticação se necessário
                     if (root.is_authenticating): Rectangle {
