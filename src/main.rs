@@ -91,6 +91,14 @@ async fn main() -> Result<()> {
     let app = AppWindow::new()?;
     let app_weak = app.as_weak();
 
+    // Carrega preferências salvas da sessão anterior
+    let saved_config = utils::config::AppConfig::load();
+    app.set_volume(saved_config.volume);
+    if !saved_config.last_view.is_empty() && saved_config.last_view != "lyrics" {
+        app.set_active_nav(saved_config.last_view.clone().into());
+        app.set_current_view(saved_config.last_view.clone().into());
+    }
+
     // Canais de comando e eventos para o player de áudio (capacidade 32)
     let (audio_cmd_tx, mut audio_cmd_rx) = mpsc::channel::<audio::player::PlayerCommand>(32);
     let (audio_event_tx, mut audio_event_rx) = mpsc::channel::<audio::player::PlayerEventMsg>(32);
@@ -913,6 +921,10 @@ async fn main() -> Result<()> {
             app.set_volume(clamped);
         }
         let _ = audio_cmd_tx_vol.try_send(audio::player::PlayerCommand::SetVolume(clamped));
+        // Persiste o volume ajustado
+        let mut cfg = utils::config::AppConfig::load();
+        cfg.volume = clamped;
+        cfg.save();
     });
 
     // Callback: Reabrir Navegador se o usuário clicar no banner
@@ -1133,6 +1145,14 @@ async fn main() -> Result<()> {
     let queue_state_nav = queue_state.clone();
     app.on_navigate(move |view_name| {
         let view = view_name.to_string();
+
+        // Persiste a navegação se não for letras
+        if view != "lyrics" {
+            let mut cfg = utils::config::AppConfig::load();
+            cfg.last_view = view.clone();
+            cfg.save();
+        }
+
         if let Some(app) = app_weak_nav.upgrade() {
             app.set_active_nav(view.clone().into());
             app.set_lyrics_active(false);

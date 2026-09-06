@@ -1,1 +1,1 @@
-// Funções utilitárias diversas
+pub mod config;
