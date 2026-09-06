@@ -1,0 +1,1391 @@
+// Cache invalidation trigger
+import { Theme } from "Theme.slint";
+import { Sidebar } from "sidebar.slint";
+import { TopPlayer } from "top_player.slint";
+import { QueuePanel } from "queue_panel.slint";
+import { PlaylistItem, TrackItem, LyricItem } from "types.slint";
+import { ScrollView, Button } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    title: "Apple Music";
+    width: 1200px;
+    height: 800px;
+    background: Theme.background-base;
+    default-font-family: Theme.default-font-family;
+
+    // Paleta Oficial Apple Music Dark Mode
+    in-out property <color> accent-color: Theme.accent;
+    in-out property <color> text-color: Theme.text-primary;
+    in-out property <color> text-muted: Theme.text-secondary;
+    
+    // Estado de Navegação e Visualização
+    in-out property <string> current_view: "listen_now";
+    in-out property <string> active_nav: "listen_now";
+    in-out property <bool> is_authenticating: false;
+    in-out property <string> auth_status_text: "Conectando ao Spotify...";
+    
+    // Modelos de Dados
+    in-out property <[PlaylistItem]> playlists;
+    in-out property <[TrackItem]> current_tracks;
+    in-out property <[TrackItem]> recent_tracks;
+    in-out property <[TrackItem]> search_tracks;
+    in-out property <[TrackItem]> queue_tracks;
+    in-out property <[LyricItem]> lyrics;
+    
+    // Metadados da Playlist Ativa
+    in-out property <string> playlist_title: "Minha Biblioteca";
+    in-out property <string> playlist_subtitle: "Spotify Rust";
+    in-out property <int> playlist_track_count: 0;
+    in-out property <image> playlist_cover;
+    in-out property <bool> playlist_has_cover: false;
+
+    // Estado do Top Player
+    in-out property <bool> is_playing: false;
+    in-out property <string> current_track_title: "Nenhuma música selecionada";
+    in-out property <string> current_track_artist: "Selecione uma faixa para ouvir";
+    in-out property <image> current_track_cover;
+    in-out property <bool> has_cover: false;
+    in-out property <float> playback_progress: 0.0;
+    in-out property <string> time_elapsed: "0:00";
+    in-out property <string> time_remaining: "-0:00";
+    in-out property <bool> lyrics_active: false;
+    in-out property <bool> queue_open: false;
+    in-out property <float> volume: 0.8;
+    
+    // Ambient Art Imersiva (Capa Desfocada no Fundo)
+    in-out property <image> background_ambient_art;
+    in-out property <bool> has_ambient_art: false;
+    
+    // Gradiente dinâmico da capa para as letras (Apple Music Style)
+    in-out property <color> dynamic_color_top: #25121e;
+    in-out property <color> dynamic_color_bottom: #0e0e12;
+
+    // Callbacks com o backend Rust
+    callback toggle_play_pause();
+    callback play_pause();
+    callback next_track();
+    callback previous_track();
+    callback prev_track();
+    callback seek(float);
+    callback seek_progress(float);
+    callback toggle_lyrics();
+    callback toggle_queue();
+    callback play_queue_track(int);
+    callback share_track();
+    callback set_volume(float);
+    callback navigate(string);
+    callback select_playlist(string);
+    callback play_track_at_index(int);
+    callback play_recent_track(int);
+    callback play_search_track(int);
+    callback search_changed(string);
+    callback seek_lyric(int);
+    callback open_auth_browser();
+
+    // 1. Camada de Fundo com Ambient Art (Capa Desfocada com interpolação contínua)
+    if (root.has_ambient_art): Image {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        source: root.background_ambient_art;
+        image-fit: cover;
+        opacity: 0.25;
+        animate opacity { duration: 500ms; easing: ease-in-out; }
+    }
+
+    // 2. Máscara Escura Translúcida para Contraste Apple Music
+    if (root.has_ambient_art): Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(180deg, #161618a0 0%, #161618f5 100%);
+    }
+
+    VerticalLayout {
+            // 1. Barra Superior Fixa do Player
+            TopPlayer {
+                accent-color: root.accent-color;
+                text-color: root.text-color;
+                text-muted: root.text-muted;
+                
+                is_playing: root.is_playing;
+                track_title: root.current_track_title;
+                track_artist: root.current_track_artist;
+                track_cover: root.current_track_cover;
+                has_cover: root.has_cover;
+                
+                progress: root.playback_progress;
+                time_elapsed: root.time_elapsed;
+                time_remaining: root.time_remaining;
+                lyrics_active: root.lyrics_active;
+                queue_open: root.queue_open;
+                volume: root.volume;
+                
+                toggle_play_pause => { root.toggle_play_pause(); }
+                play_pause => { root.toggle_play_pause(); }
+                next_track => { root.next_track(); }
+                previous_track => { root.previous_track(); }
+                prev_track => { root.previous_track(); }
+                toggle_lyrics => { root.toggle_lyrics(); }
+                toggle_queue => { root.toggle_queue(); }
+                share_track => { root.share_track(); }
+                seek(p) => { root.seek(p); }
+                seek_progress(p) => { root.seek(p); }
+                set_volume(v) => { root.set_volume(v); }
+            }
+            
+            // 2. Área Central (Sidebar + Conteúdo Principal)
+            HorizontalLayout {
+                Sidebar {
+                    accent-color: root.accent-color;
+                    text-color: root.text-color;
+                    text-muted: root.text-muted;
+                    active_section: root.active_nav;
+                    playlists: root.playlists;
+                    
+                    navigate(sec) => {
+                        root.active_nav = sec;
+                        root.navigate(sec);
+                    }
+                    select_playlist(id) => {
+                        root.active_nav = id;
+                        root.select_playlist(id);
+                    }
+                    search_changed(q) => {
+                        if (q != "") {
+                            root.active_nav = "";
+                        }
+                        root.search_changed(q);
+                    }
+                }
+                
+                // Área de Conteúdo
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: root.current_view == "lyrics" 
+                        ? @linear-gradient(180deg, root.dynamic_color_top 0%, root.dynamic_color_bottom 100%) 
+                        : (root.has_ambient_art ? transparent : Theme.background-base);
+                    clip: true;
+
+                    // Banner de Conexão / Autenticação se necessário
+                    if (root.is_authenticating): Rectangle {
+                        y: 16px;
+                        x: 30px;
+                        width: parent.width - 60px;
+                        height: 48px;
+                        border-radius: 10px;
+                        background: #202024;
+                        border-width: 1px;
+                        border-color: #32323a;
+                        z: 100;
+                        
+                        HorizontalLayout {
+                            padding-left: 18px;
+                            padding-right: 18px;
+                            spacing: 14px;
+                            alignment: space-between;
+                            
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Image {
+                                    source: @image-url("assets/icons/radio.svg");
+                                    colorize: root.accent-color;
+                                    width: 16px;
+                                    height: 16px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: root.auth_status_text;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: root.text-color;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            
+                            auth_btn := TouchArea {
+                                width: 140px;
+                                height: 32px;
+                                y: 8px;
+                                clicked => { root.open_auth_browser(); }
+                                Rectangle {
+                                    border-radius: 16px;
+                                    background: auth_btn.has-hover ? #FA243C : #32323a;
+                                    animate background { duration: 150ms; }
+                                    Text {
+                                        text: "Abrir Navegador";
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        color: #ffffff;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%;
+                                        height: 100%;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // VISTA 1: LETRAS EM TEMPO REAL (APPLE MUSIC)
+                    // ==========================================
+                    if (root.current_view == "lyrics"): VerticalLayout {
+                        padding-left: 0px;
+                        padding-right: 0px;
+                        padding-top: 30px;
+                        padding-bottom: 30px;
+                        spacing: 20px;
+                        
+                        // Cabeçalho das letras com botão fechar
+                        HorizontalLayout {
+                            padding-left: 48px;
+                            padding-right: 64px;
+                            alignment: space-between;
+                            VerticalLayout {
+                                Text {
+                                    text: root.current_track_title;
+                                    font-size: 24px;
+                                    font-weight: 800;
+                                    color: root.text-color;
+                                }
+                                Text {
+                                    text: root.current_track_artist;
+                                    font-size: 15px;
+                                    font-weight: 500;
+                                    color: root.text-muted;
+                                }
+                            }
+                            
+                            close_lyric_touch := TouchArea {
+                                width: 36px;
+                                height: 36px;
+                                mouse-cursor: pointer;
+                                clicked => { root.toggle_lyrics(); }
+                                Rectangle {
+                                    border-radius: 18px;
+                                    background: close_lyric_touch.pressed ? #ffffff40 : (close_lyric_touch.has-hover ? #ffffff25 : #ffffff14);
+                                    animate background { duration: 150ms; }
+                                    Image {
+                                        source: @image-url("assets/icons/close.svg");
+                                        colorize: #ffffff;
+                                        width: 14px;
+                                        height: 14px;
+                                        x: (parent.width - self.width) / 2;
+                                        y: (parent.height - self.height) / 2;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Rolagem contínua de letras estilo karaokê
+                        ScrollView {
+                            horizontal-stretch: 1;
+                            vertical-stretch: 1;
+                            
+                            VerticalLayout {
+                                spacing: 18px;
+                                padding-left: 48px;
+                                padding-right: 64px;
+                                padding-top: 20px;
+                                padding-bottom: 120px;
+                                
+                                for line in root.lyrics: lyric_line_touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.seek_lyric(line.timestamp_ms);
+                                    }
+                                    
+                                    Text {
+                                        text: line.text;
+                                        width: 100%;
+                                        wrap: word-wrap;
+                                        horizontal-alignment: left;
+                                        font-size: line.is_active ? 36px : (lyric_line_touch.has-hover ? 26px : 24px);
+                                        font-weight: line.is_active ? 800 : 600;
+                                        color: line.is_active ? #ffffff : (lyric_line_touch.has-hover ? #ffffff : #a0a0a0);
+                                        opacity: line.is_active ? 1.0 : (lyric_line_touch.has-hover ? 0.8 : 0.4);
+                                        animate font-size { duration: 200ms; }
+                                        animate opacity { duration: 200ms; }
+                                        animate color { duration: 150ms; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // VISTA 2: OUVIR AGORA (HOME APPLE MUSIC)
+                    // ==========================================
+                    if (root.current_view == "listen_now"): ScrollView {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+                        
+                        VerticalLayout {
+                            padding-left: 36px;
+                            padding-right: 36px;
+                            padding-top: 32px;
+                            padding-bottom: 40px;
+                            spacing: 32px;
+                            
+                            // Título da Página
+                            VerticalLayout {
+                                spacing: 6px;
+                                Text {
+                                    text: "Ouvir Agora";
+                                    font-size: 34px;
+                                    font-weight: 800;
+                                    color: root.text-color;
+                                }
+                                Text {
+                                    text: "Músicas e playlists recentes da sua conta do Spotify";
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                    color: root.text-muted;
+                                }
+                            }
+                            
+                            // Seção 1: Cards Horizontais com Capas Visíveis (Estilo Apple Music)
+                            VerticalLayout {
+                                spacing: 16px;
+                                
+                                Text {
+                                    text: "Tocadas Recentemente";
+                                    font-size: 22px;
+                                    font-weight: 700;
+                                    color: root.text-color;
+                                }
+                                
+                                ScrollView {
+                                    height: 240px;
+                                    horizontal-stretch: 1;
+                                    
+                                    HorizontalLayout {
+                                        spacing: 18px;
+                                        padding-top: 4px;
+                                        padding-bottom: 16px;
+                                        
+                                        for track[idx] in root.recent_tracks: rec_card := TouchArea {
+                                            width: 154px;
+                                            height: 220px;
+                                            mouse-cursor: pointer;
+                                            clicked => { root.play_recent_track(idx); }
+                                            
+                                            Rectangle {
+                                                width: 154px;
+                                                height: 220px;
+                                                border-radius: Theme.radius-card;
+                                                background: rec_card.has-hover ? Theme.surface-hover : transparent;
+                                                animate background { duration: 150ms; }
+                                                
+                                                VerticalLayout {
+                                                    padding: 6px;
+                                                    spacing: 10px;
+                                                    
+                                                    // Capa da Música (142x142)
+                                                    Rectangle {
+                                                        width: 142px;
+                                                        height: 142px;
+                                                        border-radius: Theme.radius-cover;
+                                                        background: @linear-gradient(135deg, #2b1822 0%, #181820 100%);
+                                                        border-width: 1px;
+                                                        border-color: (track.title == root.current_track_title) ? Theme.accent : Theme.border-subtle;
+                                                        clip: true;
+                                                        
+                                                        // Imagem da capa real
+                                                        if (track.has_cover): Image {
+                                                            source: track.cover;
+                                                            width: 100%;
+                                                            height: 100%;
+                                                            image-fit: cover;
+                                                        }
+                                                        
+                                                        // Equalizador quando a faixa está ativa
+                                                        if (track.title == root.current_track_title): Rectangle {
+                                                            width: 100%;
+                                                            height: 100%;
+                                                            background: #00000077;
+                                                            Image {
+                                                                source: @image-url("assets/icons/equalizer.svg");
+                                                                colorize: Theme.accent;
+                                                                width: 32px;
+                                                                height: 32px;
+                                                                x: (parent.width - self.width) / 2;
+                                                                y: (parent.height - self.height) / 2;
+                                                            }
+                                                        }
+                                                        
+                                                        // Ícone padrão de nota se não tiver capa e não estiver ativa
+                                                        if (!track.has_cover && track.title != root.current_track_title): Image {
+                                                            source: @image-url("assets/icons/music-note.svg");
+                                                            colorize: #565660;
+                                                            width: 48px;
+                                                            height: 48px;
+                                                            x: (parent.width - self.width) / 2;
+                                                            y: (parent.height - self.height) / 2;
+                                                        }
+                                                        
+                                                        // Botão Play ao passar o mouse
+                                                        if (rec_card.has-hover && track.title != root.current_track_title): Rectangle {
+                                                            width: 100%;
+                                                            height: 100%;
+                                                            background: #00000055;
+                                                            Rectangle {
+                                                                width: 42px;
+                                                                height: 42px;
+                                                                border-radius: 21px;
+                                                                background: #ffffff;
+                                                                x: (parent.width - self.width) / 2;
+                                                                y: (parent.height - self.height) / 2;
+                                                                Image {
+                                                                    source: @image-url("assets/icons/play.svg");
+                                                                    colorize: #161618;
+                                                                    width: 15px;
+                                                                    height: 15px;
+                                                                    x: (parent.width - self.width) / 2 + 1px;
+                                                                    y: (parent.height - self.height) / 2;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Título e Artista
+                                                    VerticalLayout {
+                                                        spacing: 3px;
+                                                        Text {
+                                                            text: track.title;
+                                                            font-size: 13px;
+                                                            font-weight: 700;
+                                                            color: (track.title == root.current_track_title) ? Theme.accent : Theme.text-primary;
+                                                            overflow: elide;
+                                                        }
+                                                        Text {
+                                                            text: track.artist;
+                                                            font-size: 12px;
+                                                            font-weight: 500;
+                                                            color: Theme.text-secondary;
+                                                            overflow: elide;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Seção 2: Histórico de Reprodução em Tabela Elegante
+                            VerticalLayout {
+                                spacing: 12px;
+                                
+                                Text {
+                                    text: "Histórico de Reprodução";
+                                    font-size: 18px;
+                                    font-weight: 700;
+                                    color: root.text-color;
+                                }
+                                
+                                // Cabeçalho da Tabela
+                                HorizontalLayout {
+                                    padding-left: 16px;
+                                    padding-right: 16px;
+                                    spacing: 0px;
+                                    height: 24px;
+                                    
+                                    // 1. Coluna # (Fixa)
+                                    Text {
+                                        width: 40px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        color: Theme.text-secondary;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        text: "#";
+                                    }
+                                    // 2. Coluna TÍTULO (35% da tela)
+                                    Text {
+                                        width: 35%;
+                                        overflow: elide;
+                                        horizontal-alignment: left;
+                                        vertical-alignment: center;
+                                        color: Theme.text-secondary;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        text: "TÍTULO";
+                                    }
+                                    // 3. Coluna ARTISTA (25% da tela)
+                                    Text {
+                                        width: 25%;
+                                        overflow: elide;
+                                        horizontal-alignment: left;
+                                        vertical-alignment: center;
+                                        color: Theme.text-secondary;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        text: "ARTISTA";
+                                    }
+                                    // 4. Coluna ÁLBUM (25% da tela)
+                                    Text {
+                                        width: 25%;
+                                        overflow: elide;
+                                        horizontal-alignment: left;
+                                        vertical-alignment: center;
+                                        color: Theme.text-secondary;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        text: "ÁLBUM";
+                                    }
+                                    // 5. Coluna DURAÇÃO (Fixa à direita)
+                                    Text {
+                                        width: 60px;
+                                        horizontal-alignment: right;
+                                        vertical-alignment: center;
+                                        color: Theme.text-secondary;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        text: "DURAÇÃO";
+                                    }
+                                }
+                                
+                                Rectangle { height: 1px; background: Theme.border-subtle; width: 100%; }
+                                
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    for track[idx] in root.recent_tracks: rec_row_touch := TouchArea {
+                                        height: 44px;
+                                        mouse-cursor: pointer;
+                                        clicked => { root.play_recent_track(idx); }
+                                        
+                                        Rectangle {
+                                            border-radius: Theme.radius-control;
+                                            background: rec_row_touch.has-hover 
+                                                ? Theme.surface-hover 
+                                                : ((track.title == root.current_track_title) ? Theme.accent-surface : Colors.transparent);
+                                            border-width: (track.title == root.current_track_title) ? 1px : 0px;
+                                            border-color: Theme.accent-border;
+                                            animate background { duration: 100ms; }
+                                            
+                                            HorizontalLayout {
+                                                padding-left: 16px;
+                                                padding-right: 16px;
+                                                spacing: 0px;
+                                                
+                                                // 1. Coluna # (Fixa)
+                                                Rectangle {
+                                                    width: 40px;
+                                                    
+                                                    if (track.title == root.current_track_title): Image {
+                                                        source: @image-url("assets/icons/equalizer.svg");
+                                                        colorize: Theme.accent;
+                                                        width: 14px;
+                                                        height: 14px;
+                                                        x: (parent.width - self.width) / 2;
+                                                        y: (parent.height - self.height) / 2;
+                                                    }
+                                                    if (track.title != root.current_track_title && rec_row_touch.has-hover): Image {
+                                                        source: @image-url("assets/icons/play.svg");
+                                                        colorize: #ffffff;
+                                                        width: 11px;
+                                                        height: 11px;
+                                                        x: (parent.width - self.width) / 2;
+                                                        y: (parent.height - self.height) / 2;
+                                                    }
+                                                    if (track.title != root.current_track_title && !rec_row_touch.has-hover): Text {
+                                                        text: "\{idx + 1}";
+                                                        color: root.text-muted;
+                                                        font-size: 12px;
+                                                        font-weight: 500;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                        width: 100%;
+                                                        height: 100%;
+                                                    }
+                                                }
+                                                
+                                                // 2. Coluna TÍTULO (35% da tela)
+                                                Text {
+                                                    text: track.title;
+                                                    width: 35%;
+                                                    overflow: elide;
+                                                    horizontal-alignment: left;
+                                                    vertical-alignment: center;
+                                                    color: (track.title == root.current_track_title) 
+                                                        ? Theme.accent 
+                                                        : (rec_row_touch.has-hover ? #ffffff : #f0f0f2);
+                                                    font-size: 13px;
+                                                    font-weight: (track.title == root.current_track_title) ? 700 : 600;
+                                                }
+                                                
+                                                // 3. Artista
+                                                Text {
+                                                    text: track.artist;
+                                                    width: 25%;
+                                                    overflow: elide;
+                                                    horizontal-alignment: left;
+                                                    vertical-alignment: center;
+                                                    color: (rec_row_touch.has-hover ? #c8c8ce : #9c9ca4);
+                                                    font-size: 12px;
+                                                    font-weight: 500;
+                                                }
+                                                
+                                                // 4. Álbum
+                                                Text {
+                                                    text: track.album;
+                                                    width: 25%;
+                                                    overflow: elide;
+                                                    horizontal-alignment: left;
+                                                    vertical-alignment: center;
+                                                    color: (rec_row_touch.has-hover ? #a8a8ae : #7a7a82);
+                                                    font-size: 12px;
+                                                }
+                                                
+                                                // 5. Duração
+                                                Text {
+                                                    text: track.duration;
+                                                    width: 60px;
+                                                    horizontal-alignment: right;
+                                                    vertical-alignment: center;
+                                                    color: (rec_row_touch.has-hover ? #c8c8ce : #8e8e93);
+                                                    font-size: 12px;
+                                                    font-weight: 500;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // VISTA 3: DETALHES DA PLAYLIST (TABELA DE FAIXAS)
+                    // ==========================================
+                    if (root.current_view == "playlist_detail"): ScrollView {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+                        
+                        VerticalLayout {
+                            padding-left: 36px;
+                            padding-right: 36px;
+                            padding-top: 32px;
+                            padding-bottom: 40px;
+                            spacing: 28px;
+                            
+                            // Cabeçalho da Playlist Estilo Apple Music
+                            HorizontalLayout {
+                                spacing: 28px;
+                                
+                                Rectangle {
+                                    width: 170px;
+                                    height: 170px;
+                                    border-radius: 14px;
+                                    background: (root.playlist_title == "Músicas Curtidas")
+                                        ? @linear-gradient(135deg, #FA2D55 0%, #7A1428 100%)
+                                        : @linear-gradient(135deg, #2b1822 0%, #181820 100%);
+                                    border-width: 1px;
+                                    border-color: (root.playlist_title == "Músicas Curtidas") ? #FA2D5544 : #35353e;
+                                    clip: true;
+                                    
+                                    if (root.playlist_title == "Músicas Curtidas"): Image {
+                                        source: @image-url("assets/icons/heart.svg");
+                                        colorize: #ffffff;
+                                        width: 64px;
+                                        height: 64px;
+                                        x: (parent.width - self.width) / 2;
+                                        y: (parent.height - self.height) / 2;
+                                    }
+                                    if (root.playlist_title != "Músicas Curtidas" && root.playlist_has_cover): Image {
+                                        source: root.playlist_cover;
+                                        width: 100%;
+                                        height: 100%;
+                                        image-fit: cover;
+                                    }
+                                    if (root.playlist_title != "Músicas Curtidas" && !root.playlist_has_cover): Image {
+                                        source: @image-url("assets/icons/music-note.svg");
+                                        colorize: #8e8e93;
+                                        width: 60px;
+                                        height: 60px;
+                                        x: (parent.width - self.width) / 2;
+                                        y: (parent.height - self.height) / 2;
+                                    }
+                                }
+                                
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 8px;
+                                    
+                                    Text {
+                                        text: "PLAYLIST";
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        color: root.text-muted;
+                                    }
+                                    Text {
+                                        text: root.playlist_title;
+                                        font-size: 34px;
+                                        font-weight: 800;
+                                        color: root.text-color;
+                                    }
+                                    if (root.playlist_subtitle != ""): Text {
+                                        text: root.playlist_subtitle;
+                                        font-size: 13px;
+                                        font-weight: 500;
+                                        color: root.text-muted;
+                                    }
+                                    Text {
+                                        text: "\{root.playlist_track_count} músicas";
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        color: root.text-muted;
+                                    }
+                                    
+                                    // Botão de Play na Playlist
+                                    Rectangle {
+                                        width: 130px;
+                                        height: 38px;
+                                        border-radius: 19px;
+                                        background: root.accent-color;
+                                        
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                if (root.current_tracks.length > 0) {
+                                                    root.play_track_at_index(0);
+                                                }
+                                            }
+                                        }
+                                        
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            spacing: 8px;
+                                            
+                                            Image {
+                                                source: @image-url("assets/icons/play.svg");
+                                                colorize: #ffffff;
+                                                width: 14px;
+                                                height: 14px;
+                                                vertical-alignment: center;
+                                            }
+                                            Text {
+                                                text: "Reproduzir";
+                                                font-size: 13px;
+                                                font-weight: 700;
+                                                color: #ffffff;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Cabeçalho da Tabela
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
+                                spacing: 0px;
+                                height: 24px;
+                                
+                                // 1. Coluna # (Fixa)
+                                Text {
+                                    width: 40px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "#";
+                                }
+                                // 2. Coluna TÍTULO (35% da tela)
+                                Text {
+                                    width: 35%;
+                                    overflow: elide;
+                                    horizontal-alignment: left;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "TÍTULO";
+                                }
+                                // 3. Coluna ARTISTA (25% da tela)
+                                Text {
+                                    width: 25%;
+                                    overflow: elide;
+                                    horizontal-alignment: left;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "ARTISTA";
+                                }
+                                // 4. Coluna ÁLBUM (25% da tela)
+                                Text {
+                                    width: 25%;
+                                    overflow: elide;
+                                    horizontal-alignment: left;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "ÁLBUM";
+                                }
+                                // 5. Coluna DURAÇÃO (Fixa à direita)
+                                Text {
+                                    width: 60px;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "DURAÇÃO";
+                                }
+                            }
+                            
+                            Rectangle { height: 1px; background: Theme.border-subtle; width: 100%; }
+                            
+                            if (root.current_tracks.length == 0): Rectangle {
+                                height: 140px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 8px;
+                                    Text {
+                                        text: "Carregando músicas...";
+                                        color: root.text-muted;
+                                        font-size: 14px;
+                                        font-weight: 500;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+                            }
+                            
+                            // Linhas de Músicas
+                            VerticalLayout {
+                                spacing: 2px;
+                                for track[idx] in root.current_tracks: track_touch := TouchArea {
+                                    height: 44px;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.play_track_at_index(idx); }
+                                    
+                                    Rectangle {
+                                        border-radius: Theme.radius-control;
+                                        background: track_touch.has-hover 
+                                            ? Theme.surface-hover 
+                                            : ((track.title == root.current_track_title) ? Theme.accent-surface : Colors.transparent);
+                                        border-width: (track.title == root.current_track_title) ? 1px : 0px;
+                                        border-color: Theme.accent-border;
+                                        animate background { duration: 100ms; }
+                                        
+                                        HorizontalLayout {
+                                            padding-left: 16px;
+                                            padding-right: 16px;
+                                            spacing: 0px;
+                                            
+                                            // 1. Coluna # (Fixa)
+                                            Rectangle {
+                                                width: 40px;
+                                                
+                                                if (track.title == root.current_track_title): Image {
+                                                    source: @image-url("assets/icons/equalizer.svg");
+                                                    colorize: Theme.accent;
+                                                    width: 14px;
+                                                    height: 14px;
+                                                    x: (parent.width - self.width) / 2;
+                                                    y: (parent.height - self.height) / 2;
+                                                }
+                                                if (track.title != root.current_track_title && track_touch.has-hover): Image {
+                                                    source: @image-url("assets/icons/play.svg");
+                                                    colorize: #ffffff;
+                                                    width: 11px;
+                                                    height: 11px;
+                                                    x: (parent.width - self.width) / 2;
+                                                    y: (parent.height - self.height) / 2;
+                                                }
+                                                if (track.title != root.current_track_title && !track_touch.has-hover): Text {
+                                                    text: "\{idx + 1}";
+                                                    color: root.text-muted;
+                                                    font-size: 12px;
+                                                    font-weight: 500;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                    width: 100%;
+                                                    height: 100%;
+                                                }
+                                            }
+                                            
+                                            // 2. Coluna TÍTULO (35% da tela)
+                                            Text {
+                                                text: track.title;
+                                                width: 35%;
+                                                overflow: elide;
+                                                horizontal-alignment: left;
+                                                vertical-alignment: center;
+                                                color: (track.title == root.current_track_title) 
+                                                    ? Theme.accent 
+                                                    : (track_touch.has-hover ? #ffffff : #f0f0f2);
+                                                font-size: 13px;
+                                                font-weight: (track.title == root.current_track_title) ? 700 : 600;
+                                            }
+                                            
+                                            // 3. Coluna ARTISTA (25% da tela)
+                                            Text {
+                                                text: track.artist;
+                                                width: 25%;
+                                                overflow: elide;
+                                                horizontal-alignment: left;
+                                                vertical-alignment: center;
+                                                color: (track_touch.has-hover ? #c8c8ce : #9c9ca4);
+                                                font-size: 12px;
+                                                font-weight: 500;
+                                            }
+                                            
+                                            // 4. Coluna ÁLBUM (25% da tela)
+                                            Text {
+                                                text: track.album;
+                                                width: 25%;
+                                                overflow: elide;
+                                                horizontal-alignment: left;
+                                                vertical-alignment: center;
+                                                color: (track_touch.has-hover ? #a8a8ae : #7a7a82);
+                                                font-size: 12px;
+                                            }
+                                            
+                                            // 5. Coluna DURAÇÃO (Fixa à direita)
+                                            Text {
+                                                text: track.duration;
+                                                width: 60px;
+                                                horizontal-alignment: right;
+                                                vertical-alignment: center;
+                                                color: (track_touch.has-hover ? #c8c8ce : #8e8e93);
+                                                font-size: 12px;
+                                                font-weight: 500;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // VISTA 4: RESULTADOS DA BUSCA
+                    // ==========================================
+                    if (root.current_view == "search"): ScrollView {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+                        
+                        VerticalLayout {
+                            padding-left: 36px;
+                            padding-right: 36px;
+                            padding-top: 32px;
+                            padding-bottom: 40px;
+                            spacing: 24px;
+                            
+                            VerticalLayout {
+                                spacing: 6px;
+                                Text {
+                                    text: "Resultados da Busca";
+                                    font-size: 34px;
+                                    font-weight: 800;
+                                    color: root.text-color;
+                                }
+                                Text {
+                                    text: "Músicas e artistas encontrados no Spotify";
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                    color: root.text-muted;
+                                }
+                            }
+                            
+                            // Cabeçalho da Tabela
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
+                                spacing: 0px;
+                                height: 24px;
+                                
+                                // 1. Coluna # (Fixa)
+                                Text {
+                                    width: 40px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "#";
+                                }
+                                // 2. Coluna TÍTULO (35% da tela)
+                                Text {
+                                    width: 35%;
+                                    overflow: elide;
+                                    horizontal-alignment: left;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "TÍTULO";
+                                }
+                                // 3. Coluna ARTISTA (25% da tela)
+                                Text {
+                                    width: 25%;
+                                    overflow: elide;
+                                    horizontal-alignment: left;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "ARTISTA";
+                                }
+                                // 4. Coluna ÁLBUM (25% da tela)
+                                Text {
+                                    width: 25%;
+                                    overflow: elide;
+                                    horizontal-alignment: left;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "ÁLBUM";
+                                }
+                                // 5. Coluna DURAÇÃO (Fixa à direita)
+                                Text {
+                                    width: 60px;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    text: "DURAÇÃO";
+                                }
+                            }
+                            
+                            Rectangle { height: 1px; background: Theme.border-subtle; width: 100%; }
+                            
+                            if (root.search_tracks.length == 0): Rectangle {
+                                height: 140px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 8px;
+                                    Text {
+                                        text: "Nenhuma música encontrada ou digite para pesquisar...";
+                                        color: root.text-muted;
+                                        font-size: 14px;
+                                        font-weight: 500;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+                            }
+                            
+                            VerticalLayout {
+                                spacing: 2px;
+                                for track[idx] in root.search_tracks: s_touch := TouchArea {
+                                    height: 44px;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.play_search_track(idx); }
+                                    
+                                    Rectangle {
+                                        border-radius: Theme.radius-control;
+                                        background: s_touch.has-hover 
+                                            ? Theme.surface-hover 
+                                            : ((track.title == root.current_track_title) ? Theme.accent-surface : Colors.transparent);
+                                        border-width: (track.title == root.current_track_title) ? 1px : 0px;
+                                        border-color: Theme.accent-border;
+                                        animate background { duration: 100ms; }
+                                        
+                                        HorizontalLayout {
+                                            padding-left: 16px;
+                                            padding-right: 16px;
+                                            spacing: 0px;
+                                            
+                                            // 1. Coluna # (Fixa)
+                                            Rectangle {
+                                                width: 40px;
+                                                
+                                                if (track.title == root.current_track_title): Image {
+                                                    source: @image-url("assets/icons/equalizer.svg");
+                                                    colorize: Theme.accent;
+                                                    width: 14px;
+                                                    height: 14px;
+                                                    x: (parent.width - self.width) / 2;
+                                                    y: (parent.height - self.height) / 2;
+                                                }
+                                                if (track.title != root.current_track_title && s_touch.has-hover): Image {
+                                                    source: @image-url("assets/icons/play.svg");
+                                                    colorize: #ffffff;
+                                                    width: 11px;
+                                                    height: 11px;
+                                                    x: (parent.width - self.width) / 2;
+                                                    y: (parent.height - self.height) / 2;
+                                                }
+                                                if (track.title != root.current_track_title && !s_touch.has-hover): Text {
+                                                    text: "\{idx + 1}";
+                                                    color: root.text-muted;
+                                                    font-size: 12px;
+                                                    font-weight: 500;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                    width: 100%;
+                                                    height: 100%;
+                                                }
+                                            }
+                                            
+                                            // 2. Coluna TÍTULO (35% da tela)
+                                            Text {
+                                                text: track.title;
+                                                width: 35%;
+                                                overflow: elide;
+                                                horizontal-alignment: left;
+                                                vertical-alignment: center;
+                                                color: (track.title == root.current_track_title) 
+                                                    ? Theme.accent 
+                                                    : (s_touch.has-hover ? #ffffff : #f0f0f2);
+                                                font-size: 13px;
+                                                font-weight: (track.title == root.current_track_title) ? 700 : 600;
+                                            }
+                                            
+                                            // 3. Coluna ARTISTA (25% da tela)
+                                            Text {
+                                                text: track.artist;
+                                                width: 25%;
+                                                overflow: elide;
+                                                horizontal-alignment: left;
+                                                vertical-alignment: center;
+                                                color: (s_touch.has-hover ? #c8c8ce : #9c9ca4);
+                                                font-size: 12px;
+                                                font-weight: 500;
+                                            }
+                                            
+                                            // 4. Coluna ÁLBUM (25% da tela)
+                                            Text {
+                                                text: track.album;
+                                                width: 25%;
+                                                overflow: elide;
+                                                horizontal-alignment: left;
+                                                vertical-alignment: center;
+                                                color: (s_touch.has-hover ? #a8a8ae : #7a7a82);
+                                                font-size: 12px;
+                                            }
+                                            
+                                            // 5. Coluna DURAÇÃO (Fixa à direita)
+                                            Text {
+                                                text: track.duration;
+                                                width: 60px;
+                                                horizontal-alignment: right;
+                                                vertical-alignment: center;
+                                                color: (s_touch.has-hover ? #c8c8ce : #8e8e93);
+                                                font-size: 12px;
+                                                font-weight: 500;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // VISTA 5: EXPLORAR (TODAS AS PLAYLISTS)
+                    // ==========================================
+                    if (root.current_view == "browse"): ScrollView {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+                        
+                        VerticalLayout {
+                            padding-left: 36px;
+                            padding-right: 36px;
+                            padding-top: 32px;
+                            padding-bottom: 40px;
+                            spacing: 28px;
+                            
+                            VerticalLayout {
+                                spacing: 6px;
+                                Text {
+                                    text: "Explorar";
+                                    font-size: 34px;
+                                    font-weight: 800;
+                                    color: root.text-color;
+                                }
+                                Text {
+                                    text: "Todas as suas playlists salvas no Spotify";
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                    color: root.text-muted;
+                                }
+                            }
+                            
+                            GridLayout {
+                                spacing: 20px;
+                                for pl[idx] in root.playlists: pl_card := TouchArea {
+                                    col: mod(idx, 4);
+                                    row: floor(idx / 4);
+                                    height: 224px;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.select_playlist(pl.id); }
+                                    
+                                    Rectangle {
+                                        border-radius: Theme.radius-card;
+                                        background: pl_card.has-hover ? Theme.surface-raised : Theme.surface-card;
+                                        border-width: 1px;
+                                        border-color: pl_card.has-hover ? Theme.border-medium : Theme.border-subtle;
+                                        animate background { duration: 150ms; }
+                                        animate border-color { duration: 150ms; }
+                                        
+                                        VerticalLayout {
+                                            padding: 10px;
+                                            spacing: 10px;
+                                            
+                                            // Capa Superior da Playlist (140px de altura)
+                                            Rectangle {
+                                                height: 140px;
+                                                border-radius: Theme.radius-cover;
+                                                background: @linear-gradient(135deg, #2b1822 0%, #181820 100%);
+                                                border-width: 1px;
+                                                border-color: Theme.border-subtle;
+                                                clip: true;
+                                                
+                                                if (pl.has_cover): Image {
+                                                    source: pl.cover;
+                                                    width: 100%;
+                                                    height: 100%;
+                                                    image-fit: cover;
+                                                }
+                                                if (!pl.has_cover): Image {
+                                                    source: @image-url("assets/icons/playlist.svg");
+                                                    colorize: pl_card.has-hover ? Theme.accent : Theme.text-secondary;
+                                                    width: 40px;
+                                                    height: 40px;
+                                                    x: (parent.width - self.width) / 2;
+                                                    y: (parent.height - self.height) / 2;
+                                                    animate colorize { duration: 150ms; }
+                                                }
+                                                
+                                                // Botão Play ao passar o mouse
+                                                if (pl_card.has-hover): Rectangle {
+                                                    width: 100%;
+                                                    height: 100%;
+                                                    background: #00000055;
+                                                    Rectangle {
+                                                        width: 40px;
+                                                        height: 40px;
+                                                        border-radius: 20px;
+                                                        background: #ffffff;
+                                                        x: parent.width - self.width - 10px;
+                                                        y: parent.height - self.height - 10px;
+                                                        Image {
+                                                            source: @image-url("assets/icons/play.svg");
+                                                            colorize: #161618;
+                                                            width: 14px;
+                                                            height: 14px;
+                                                            x: (parent.width - self.width) / 2 + 1px;
+                                                            y: (parent.height - self.height) / 2;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Metadados do Card
+                                            VerticalLayout {
+                                                spacing: 3px;
+                                                Text {
+                                                    text: pl.name;
+                                                    font-size: 13px;
+                                                    font-weight: 700;
+                                                    color: pl_card.has-hover ? Theme.accent : Theme.text-primary;
+                                                    overflow: elide;
+                                                    animate color { duration: 150ms; }
+                                                }
+                                                Text {
+                                                    text: "\{pl.track_count} músicas";
+                                                    font-size: 12px;
+                                                    font-weight: 500;
+                                                    color: Theme.text-secondary;
+                                                    overflow: elide;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // VISTA 6: RÁDIO
+                    // ==========================================
+                    if (root.current_view == "radio"): ScrollView {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+                        
+                        VerticalLayout {
+                            padding-left: 36px;
+                            padding-right: 36px;
+                            padding-top: 32px;
+                            padding-bottom: 40px;
+                            spacing: 28px;
+                            
+                            VerticalLayout {
+                                spacing: 6px;
+                                Text {
+                                    text: "Rádio";
+                                    font-size: 34px;
+                                    font-weight: 800;
+                                    color: root.text-color;
+                                }
+                                Text {
+                                    text: "Transmissões contínuas baseadas no seu perfil";
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                    color: root.text-muted;
+                                }
+                            }
+                            
+                            Rectangle {
+                                height: 170px;
+                                border-radius: 14px;
+                                background: #17171a;
+                                border-width: 1px;
+                                border-color: #26262c;
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 12px;
+                                    Image {
+                                        source: @image-url("assets/icons/radio.svg");
+                                        colorize: root.accent-color;
+                                        width: 40px;
+                                        height: 40px;
+                                        horizontal-alignment: center;
+                                    }
+                                    Text {
+                                        text: "Modo Infinito Ativo";
+                                        font-size: 16px;
+                                        font-weight: 700;
+                                        color: root.text-color;
+                                        horizontal-alignment: center;
+                                    }
+                                    Text {
+                                        text: "Ao final de cada música ou playlist, músicas similares tocarão automaticamente.";
+                                        font-size: 13px;
+                                        font-weight: 400;
+                                        color: root.text-muted;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Painel Retrátil de Fila de Reprodução (Up Next)
+                if (root.queue_open): QueuePanel {
+                    queue_tracks: root.queue_tracks;
+                    accent-color: root.accent-color;
+                    play_queue_track(idx) => {
+                        root.play_queue_track(idx);
+                    }
+                    close_queue => {
+                        root.toggle_queue();
+                    }
+                }
+            }
+        }
+}

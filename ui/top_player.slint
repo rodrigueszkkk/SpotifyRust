@@ -1,0 +1,408 @@
+import { Theme } from "Theme.slint";
+
+export component TopPlayer inherits Rectangle {
+    height: 74px;
+    background: Theme.background-player;
+    
+    in-out property <color> accent-color: Theme.accent;
+    in-out property <color> text-color: Theme.text-primary;
+    in-out property <color> text-muted: Theme.text-secondary;
+    
+    in-out property <bool> is_playing: false;
+    in-out property <string> track_title: "Nenhuma música selecionada";
+    in-out property <string> track_artist: "Selecione uma faixa para ouvir";
+    in-out property <image> track_cover;
+    in-out property <bool> has_cover: false;
+    
+    in-out property <float> progress: 0.0;
+    in-out property <string> time_elapsed: "0:00";
+    in-out property <string> time_remaining: "-0:00";
+    in-out property <bool> lyrics_active: false;
+    in-out property <bool> queue_open: false;
+    in-out property <float> volume: 0.8;
+    
+    callback toggle_play_pause();
+    callback play_pause();
+    callback next_track();
+    callback previous_track();
+    callback prev_track();
+    callback seek(float);
+    callback seek_progress(float);
+    callback toggle_lyrics();
+    callback toggle_queue();
+    callback share_track();
+    callback set_volume(float);
+
+    // Divisor inferior sutil
+    Rectangle {
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: #2b2b2f;
+    }
+    
+    HorizontalLayout {
+        padding-left: 24px;
+        padding-right: 24px;
+        spacing: 24px;
+        alignment: space-between;
+        
+        // ===================================
+        // 1. Controles de Playback (Esquerda)
+        // ===================================
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: center;
+            width: 180px;
+            
+            // Botão Anterior
+            Rectangle {
+                width: 36px;
+                height: 36px;
+                border-radius: 18px;
+                background: prev_touch.pressed ? #ffffff22 : (prev_touch.has-hover ? #ffffff14 : transparent);
+                animate background { duration: 120ms; }
+                Image {
+                    source: @image-url("assets/icons/prev.svg");
+                    colorize: prev_touch.has-hover ? text-color : text-muted;
+                    width: 15px;
+                    height: 15px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    animate colorize { duration: 120ms; }
+                }
+                prev_touch := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.previous_track();
+                    }
+                }
+            }
+            
+            // Botão Play / Pause (Apple Music Style Circle)
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                border-radius: 22px;
+                background: play_touch.pressed ? #e0e0e4 : (play_touch.has-hover ? #ffffff : #eeeeee);
+                animate background { duration: 120ms; }
+                
+                Image {
+                    source: is_playing ? @image-url("assets/icons/pause.svg") : @image-url("assets/icons/play.svg");
+                    colorize: #161618;
+                    width: is_playing ? 14px : 16px;
+                    height: is_playing ? 14px : 16px;
+                    x: is_playing ? (parent.width - self.width) / 2 : ((parent.width - self.width) / 2 + 1px);
+                    y: (parent.height - self.height) / 2;
+                }
+
+                play_touch := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.toggle_play_pause();
+                    }
+                }
+            }
+            
+            // Botão Próximo
+            Rectangle {
+                width: 36px;
+                height: 36px;
+                border-radius: 18px;
+                background: next_touch.pressed ? #ffffff22 : (next_touch.has-hover ? #ffffff14 : transparent);
+                animate background { duration: 120ms; }
+                Image {
+                    source: @image-url("assets/icons/next.svg");
+                    colorize: next_touch.has-hover ? text-color : text-muted;
+                    width: 15px;
+                    height: 15px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    animate colorize { duration: 120ms; }
+                }
+                next_touch := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.next_track();
+                    }
+                }
+            }
+        }
+        
+        // ===================================
+        // 2. Display Central Estilo Apple Music
+        // ===================================
+        Rectangle {
+            background: Theme.surface-card;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            width: 480px;
+            height: 58px;
+            y: 8px;
+            
+            HorizontalLayout {
+                padding-left: 7px;
+                padding-right: 12px;
+                padding-top: 7px;
+                padding-bottom: 7px;
+                spacing: 10px;
+                
+                // Miniatura da Capa 44x44 com border-radius 6px
+                Rectangle {
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 6px;
+                    background: #141416;
+                    border-width: 1px;
+                    border-color: Theme.border-subtle;
+                    clip: true;
+                    
+                    if (has_cover): Image {
+                        source: track_cover;
+                        width: 100%;
+                        height: 100%;
+                        image-fit: cover;
+                    }
+                    if (!has_cover): Image {
+                        source: @image-url("assets/icons/music-note.svg");
+                        colorize: #565660;
+                        width: 20px;
+                        height: 20px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                }
+                
+                // Título e Artista EMPILHADOS + Scrubber Fino (3px)
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    horizontal-stretch: 1;
+                    
+                    // Título da faixa
+                    Text {
+                        text: track_title;
+                        color: Theme.text-primary;
+                        font-size: 12px;
+                        font-weight: 700;
+                        overflow: elide;
+                    }
+                    
+                    // Artista da faixa (Empilhado)
+                    Text {
+                        text: track_artist;
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        font-weight: 500;
+                        overflow: elide;
+                    }
+                    
+                    // Scrubber com Timestamps e Barra Conectando os Tempos
+                    HorizontalLayout {
+                        spacing: 8px;
+                        
+                        Text {
+                            text: time_elapsed;
+                            color: Theme.text-tertiary;
+                            font-size: 10px;
+                            font-weight: 500;
+                            vertical-alignment: center;
+                            width: 28px;
+                        }
+                        
+                        scrubber_touch := TouchArea {
+                            height: 18px;
+                            horizontal-stretch: 1;
+                            mouse-cursor: pointer;
+                            clicked => {
+                                let frac = Math.max(0.0, Math.min(1.0, self.mouse-x / self.width));
+                                root.seek(frac);
+                            }
+                            moved => {
+                                if (self.pressed) {
+                                    let frac = Math.max(0.0, Math.min(1.0, self.mouse-x / self.width));
+                                    root.seek(frac);
+                                }
+                            }
+                            
+                            // Trilha de fundo
+                            Rectangle {
+                                y: (parent.height - self.height) / 2;
+                                height: 3px;
+                                width: 100%;
+                                background: scrubber_touch.has-hover ? #ffffff25 : Theme.surface-raised;
+                                border-radius: 1.5px;
+                                
+                                // Preenchimento de progresso
+                                Rectangle {
+                                    x: 0px;
+                                    y: 0px;
+                                    height: 3px;
+                                    width: Math.max(0px, Math.min(parent.width, parent.width * root.progress));
+                                    background: #ffffff;
+                                    border-radius: 1.5px;
+                                }
+                            }
+                        }
+                        
+                        Text {
+                            text: time_remaining;
+                            color: Theme.text-tertiary;
+                            font-size: 10px;
+                            font-weight: 500;
+                            vertical-alignment: center;
+                            horizontal-alignment: right;
+                            width: 32px;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // ===================================
+        // 3. Ações da Direita (Letras, Fila, Compartilhar, Volume)
+        // ===================================
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: center;
+            width: 280px;
+            
+            // Botão Letras (Apple Music Lyrics Icon)
+            Rectangle {
+                width: 36px;
+                height: 36px;
+                border-radius: 8px;
+                background: lyrics_active ? #FA243C22 : (lyrics_touch.has-hover ? #ffffff15 : transparent);
+                border-width: lyrics_active ? 1px : 0px;
+                border-color: root.accent-color;
+                animate background { duration: 150ms; }
+                
+                Image {
+                    source: @image-url("assets/icons/lyrics.svg");
+                    colorize: lyrics_active ? root.accent-color : (lyrics_touch.has-hover ? text-color : text-muted);
+                    width: 17px;
+                    height: 17px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    animate colorize { duration: 150ms; }
+                }
+                lyrics_touch := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: pointer;
+                    clicked => { toggle_lyrics(); }
+                }
+            }
+
+            // Botão Fila de Reprodução (Queue / Up Next)
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 6px;
+                background: queue_open ? #FA2D5524 : (queue_touch.has-hover ? #ffffff15 : transparent);
+                animate background { duration: 150ms; }
+                
+                Image {
+                    source: @image-url("assets/icons/queue.svg");
+                    colorize: queue_open ? #FA2D55 : (queue_touch.has-hover ? text-color : Theme.text-secondary);
+                    width: 16px;
+                    height: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    animate colorize { duration: 150ms; }
+                }
+                queue_touch := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: pointer;
+                    clicked => { toggle_queue(); }
+                }
+            }
+
+            // Botão Compartilhar
+            Rectangle {
+                width: 36px;
+                height: 36px;
+                border-radius: 8px;
+                background: share_touch.pressed ? #ffffff22 : (share_touch.has-hover ? #ffffff15 : transparent);
+                animate background { duration: 150ms; }
+                Image {
+                    source: @image-url("assets/icons/share.svg");
+                    colorize: share_touch.has-hover ? text-color : text-muted;
+                    width: 16px;
+                    height: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    animate colorize { duration: 150ms; }
+                }
+                share_touch := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: pointer;
+                    clicked => { share_track(); }
+                }
+            }
+            
+            // Controle de Volume
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: center;
+                
+                Rectangle {
+                    width: 20px;
+                    height: 20px;
+                    Image {
+                        source: (root.volume <= 0.01) 
+                            ? @image-url("assets/icons/volume-mute.svg") 
+                            : (root.volume < 0.5 ? @image-url("assets/icons/volume-low.svg") : @image-url("assets/icons/volume-high.svg"));
+                        colorize: vol_touch.has-hover ? text-color : text-muted;
+                        width: 14px;
+                        height: 14px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        animate colorize { duration: 150ms; }
+                    }
+                }
+                
+                vol_touch := TouchArea {
+                    width: 76px;
+                    height: 20px;
+                    mouse-cursor: pointer;
+                    moved => {
+                        if (self.pressed) {
+                            root.set_volume(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
+                        }
+                    }
+                    clicked => {
+                        root.set_volume(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
+                    }
+                    
+                    Rectangle {
+                        y: vol_touch.has-hover ? 7px : 8px;
+                        width: parent.width;
+                        height: vol_touch.has-hover ? 6px : 4px;
+                        background: #3c3c44;
+                        border-radius: 2px;
+                        animate height { duration: 100ms; }
+                        animate y { duration: 100ms; }
+                        
+                        Rectangle {
+                            width: Math.max(0px, Math.min(parent.width, parent.width * root.volume));
+                            height: 100%;
+                            background: vol_touch.has-hover ? root.accent-color : #d4d4d8;
+                            border-radius: 2px;
+                            animate background { duration: 150ms; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

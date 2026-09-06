@@ -1,0 +1,226 @@
+import { Theme } from "Theme.slint";
+import { TrackItem } from "types.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component QueuePanel inherits Rectangle {
+    width: 320px;
+    background: Theme.background-sidebar;
+    
+    in-out property <[TrackItem]> queue_tracks;
+    in-out property <color> accent-color: Theme.accent;
+    
+    callback play_queue_track(int);
+    callback close_queue();
+
+    // Borda divisória esquerda
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 1px;
+        height: parent.height;
+        background: Theme.border-subtle;
+    }
+
+    VerticalLayout {
+        width: 100%;
+        padding: 0px;
+        spacing: 0px;
+
+        // Cabeçalho da Fila
+        Rectangle {
+            height: 56px;
+            background: transparent;
+            
+            HorizontalLayout {
+                padding-left: 20px;
+                padding-right: 16px;
+                alignment: space-between;
+                
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    
+                    Text {
+                        text: "A Seguir";
+                        font-size: 16px;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                    }
+                    
+                    Text {
+                        text: root.queue_tracks.length > 0 ? (root.queue_tracks.length + " faixas na fila") : "Fila vazia";
+                        font-size: 11px;
+                        color: Theme.text-secondary;
+                    }
+                }
+
+                // Botão de Fechar
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 14px;
+                    background: close_touch.pressed ? #ffffff25 : (close_touch.has-hover ? #ffffff15 : transparent);
+                    animate background { duration: 120ms; }
+                    
+                    Image {
+                        source: @image-url("assets/icons/close.svg");
+                        width: 12px;
+                        height: 12px;
+                        colorize: close_touch.has-hover ? Theme.text-primary : Theme.text-secondary;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        animate colorize { duration: 120ms; }
+                    }
+
+                    close_touch := TouchArea {
+                        width: 100%;
+                        height: 100%;
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.close_queue();
+                        }
+                    }
+                }
+            }
+
+            // Divisor inferior do cabeçalho
+            Rectangle {
+                y: parent.height - 1px;
+                width: parent.width;
+                height: 1px;
+                background: Theme.border-subtle;
+            }
+        }
+
+        // Estado Vazio
+        if (root.queue_tracks.length == 0): Rectangle {
+            vertical-stretch: 1;
+            
+            VerticalLayout {
+                alignment: center;
+                spacing: 12px;
+                padding: 24px;
+                
+                Rectangle {
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 24px;
+                    background: #ffffff08;
+                    x: (parent.width - self.width) / 2;
+                    
+                    Image {
+                        source: @image-url("assets/icons/queue.svg");
+                        width: 24px;
+                        height: 24px;
+                        colorize: Theme.text-secondary;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                }
+
+                Text {
+                    text: "Nenhuma música na fila";
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: Theme.text-primary;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: "Toque em qualquer álbum ou playlist para começar a adicionar faixas automaticamente.";
+                    font-size: 12px;
+                    color: Theme.text-secondary;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        // Lista de Faixas
+        if (root.queue_tracks.length > 0): ScrollView {
+            width: 100%;
+            vertical-stretch: 1;
+            
+            VerticalLayout {
+                width: 100%;
+                alignment: start;
+                spacing: 2px;
+                padding-left: 8px;
+                padding-right: 8px;
+
+                for track[idx] in root.queue_tracks: Rectangle {
+                    height: 48px;
+                    width: 100%;
+                    border-radius: Theme.radius-control;
+                    background: item_touch.has-hover ? Theme.surface-hover : Colors.transparent;
+
+                    item_touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.play_queue_track(idx);
+                        }
+                    }
+
+                    // REMOVIDO "alignment: center" - O padrão do Slint é stretch
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 12px;
+
+                        // 1. Capa colada na extrema esquerda
+                        Rectangle {
+                            width: 36px;
+                            height: 36px;
+                            y: (parent.height - self.height) / 2; // Centralização vertical correta no Slint
+                            border-radius: 4px;
+                            clip: true;
+                            background: Theme.surface-raised;
+
+                            Image {
+                                width: 100%;
+                                height: 100%;
+                                image-fit: cover;
+                                source: track.cover;
+                            }
+                        }
+
+                        // 2. Textos preenchendo todo o centro
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            min-width: 0px;
+                            spacing: 2px;
+                            alignment: center; // Aqui pode, pois VerticalLayout alinha no eixo Y
+
+                            Text {
+                                text: track.title;
+                                font-size: 13px;
+                                font-weight: 600;
+                                color: Theme.text-primary;
+                                overflow: elide;
+                                horizontal-alignment: left;
+                            }
+
+                            Text {
+                                text: track.artist;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                overflow: elide;
+                                horizontal-alignment: left;
+                            }
+                        }
+
+                        // 3. Duração colada na extrema direita
+                        Text {
+                            width: 45px;
+                            y: (parent.height - self.height) / 2; // Centralização vertical correta
+                            text: track.duration;
+                            font-size: 11px;
+                            color: Theme.text-tertiary;
+                            horizontal-alignment: right;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

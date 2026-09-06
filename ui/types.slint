@@ -1,0 +1,27 @@
+export struct PlaylistItem {
+    id: string,
+    name: string,
+    image_url: string,
+    track_count: int,
+    cover: image,
+    has_cover: bool,
+}
+
+export struct TrackItem {
+    id: string,
+    uri: string,
+    title: string,
+    artist: string,
+    album: string,
+    duration: string,
+    duration_ms: int,
+    cover_url: string,
+    cover: image,
+    has_cover: bool,
+}
+
+export struct LyricItem {
+    text: string,
+    timestamp_ms: int,
+    is_active: bool,
+}

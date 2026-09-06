@@ -1,0 +1,379 @@
+import { ScrollView } from "std-widgets.slint";
+import { PlaylistItem } from "types.slint";
+import { Theme } from "Theme.slint";
+
+export component Sidebar inherits Rectangle {
+    width: 250px;
+    background: Theme.background-sidebar;
+    
+    in-out property <color> accent-color: Theme.accent;
+    in-out property <color> text-color: Theme.text-primary;
+    in-out property <color> text-muted: Theme.text-secondary;
+    in-out property <string> active_section: "listen_now";
+    in-out property <[PlaylistItem]> playlists;
+    
+    callback navigate(string);
+    callback select_playlist(string);
+    callback search_changed(string);
+    
+    // Divisor vertical à direita
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: parent.height;
+        background: Theme.border-subtle;
+    }
+    
+    VerticalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        padding-top: 18px;
+        padding-bottom: 18px;
+        spacing: 12px;
+        
+        // Campo de Busca Apple Music (Pílula Translúcida macOS)
+        Rectangle {
+            height: 32px;
+            border-radius: Theme.radius-search;
+            background: Theme.surface-hover;
+            border-width: 1px;
+            border-color: search_input.has-focus ? Theme.border-focus : Theme.border-subtle;
+            animate border-color { duration: 150ms; }
+            
+            // Ícone da lupa centralizado verticalmente com espaçamento à esquerda
+            Image {
+                source: @image-url("assets/icons/search.svg");
+                x: 12px;
+                y: (parent.height - self.height) / 2;
+                width: 14px;
+                height: 14px;
+                colorize: search_input.has-focus ? Theme.text-primary : Theme.text-secondary;
+                animate colorize { duration: 150ms; }
+            }
+            
+            search_input := TextInput {
+                x: 34px;
+                y: 0px;
+                width: parent.width - 46px;
+                height: parent.height;
+                vertical-alignment: center;
+                font-size: 12px;
+                color: Theme.text-primary;
+                selection-background-color: Theme.accent;
+                single-line: true;
+                edited => {
+                    root.search_changed(self.text);
+                }
+                accepted => {
+                    root.search_changed(self.text);
+                }
+            }
+            
+            if search_input.text == "": Text {
+                x: 34px;
+                y: (parent.height - self.height) / 2;
+                text: "Buscar";
+                font-size: 12px;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle { height: 2px; }
+        
+        // Seção Principal
+        VerticalLayout {
+            spacing: 4px;
+            
+            nav_listen := TouchArea {
+                height: 36px;
+                mouse-cursor: pointer;
+                clicked => { root.navigate("listen_now"); }
+                Rectangle {
+                    border-radius: 8px;
+                    background: (root.active_section == "listen_now") 
+                        ? #ffffff18 
+                        : (nav_listen.has-hover ? #ffffff0b : transparent);
+                    animate background { duration: 120ms; }
+                    
+                    // Indicador de barra ativa no canto esquerdo
+                    if (root.active_section == "listen_now"): Rectangle {
+                        x: 0px;
+                        y: 8px;
+                        width: 3px;
+                        height: parent.height - 16px;
+                        border-radius: 1.5px;
+                        background: root.accent-color;
+                    }
+                    
+                    HorizontalLayout {
+                        height: 36px;
+                        padding-left: 14px;
+                        spacing: 12px;
+                        alignment: center;
+                        
+                        Rectangle {
+                            width: 20px;
+                            height: 20px;
+                            y: (parent.height - self.height) / 2;
+                            
+                            Image {
+                                source: @image-url("assets/icons/home.svg");
+                                colorize: (root.active_section == "listen_now") ? root.accent-color : (nav_listen.has-hover ? text-color : text-muted);
+                                width: 16px;
+                                height: 16px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                animate colorize { duration: 120ms; }
+                            }
+                        }
+                        
+                        Text {
+                            text: "Ouvir Agora";
+                            color: (root.active_section == "listen_now") ? #ffffff : (nav_listen.has-hover ? #ffffff : #d1d1d6);
+                            font-size: 13px;
+                            font-weight: (root.active_section == "listen_now") ? 700 : 500;
+                            y: (parent.height - self.height) / 2;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+            
+            nav_browse := TouchArea {
+                height: 36px;
+                mouse-cursor: pointer;
+                clicked => { root.navigate("browse"); }
+                Rectangle {
+                    border-radius: 8px;
+                    background: (root.active_section == "browse") 
+                        ? #ffffff18 
+                        : (nav_browse.has-hover ? #ffffff0b : transparent);
+                    animate background { duration: 120ms; }
+                    
+                    if (root.active_section == "browse"): Rectangle {
+                        x: 0px;
+                        y: 8px;
+                        width: 3px;
+                        height: parent.height - 16px;
+                        border-radius: 1.5px;
+                        background: root.accent-color;
+                    }
+                    
+                    HorizontalLayout {
+                        height: 36px;
+                        padding-left: 14px;
+                        spacing: 12px;
+                        alignment: center;
+                        
+                        Rectangle {
+                            width: 20px;
+                            height: 20px;
+                            y: (parent.height - self.height) / 2;
+                            
+                            Image {
+                                source: @image-url("assets/icons/compass.svg");
+                                colorize: (root.active_section == "browse") ? root.accent-color : (nav_browse.has-hover ? text-color : text-muted);
+                                width: 16px;
+                                height: 16px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                animate colorize { duration: 120ms; }
+                            }
+                        }
+                        
+                        Text {
+                            text: "Explorar";
+                            color: (root.active_section == "browse") ? #ffffff : (nav_browse.has-hover ? #ffffff : #d1d1d6);
+                            font-size: 13px;
+                            font-weight: (root.active_section == "browse") ? 700 : 500;
+                            y: (parent.height - self.height) / 2;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+            
+            nav_radio := TouchArea {
+                height: 36px;
+                mouse-cursor: pointer;
+                clicked => { root.navigate("radio"); }
+                Rectangle {
+                    border-radius: 8px;
+                    background: (root.active_section == "radio") 
+                        ? #ffffff18 
+                        : (nav_radio.has-hover ? #ffffff0b : transparent);
+                    animate background { duration: 120ms; }
+                    
+                    if (root.active_section == "radio"): Rectangle {
+                        x: 0px;
+                        y: 8px;
+                        width: 3px;
+                        height: parent.height - 16px;
+                        border-radius: 1.5px;
+                        background: root.accent-color;
+                    }
+                    
+                    HorizontalLayout {
+                        height: 36px;
+                        padding-left: 14px;
+                        spacing: 12px;
+                        alignment: center;
+                        
+                        Rectangle {
+                            width: 20px;
+                            height: 20px;
+                            y: (parent.height - self.height) / 2;
+                            
+                            Image {
+                                source: @image-url("assets/icons/radio.svg");
+                                colorize: (root.active_section == "radio") ? root.accent-color : (nav_radio.has-hover ? text-color : text-muted);
+                                width: 16px;
+                                height: 16px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                animate colorize { duration: 120ms; }
+                            }
+                        }
+                        
+                        Text {
+                            text: "Rádio";
+                            color: (root.active_section == "radio") ? #ffffff : (nav_radio.has-hover ? #ffffff : #d1d1d6);
+                            font-size: 13px;
+                            font-weight: (root.active_section == "radio") ? 700 : 500;
+                            y: (parent.height - self.height) / 2;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+        
+        Rectangle { height: 6px; }
+        
+        // Seção Biblioteca
+        Text {
+            text: "BIBLIOTECA";
+            color: #6c6c72;
+            font-size: 11px;
+            font-weight: 700;
+            x: 10px;
+        }
+        
+        VerticalLayout {
+            spacing: 4px;
+            
+            nav_liked := TouchArea {
+                height: 36px;
+                mouse-cursor: pointer;
+                clicked => { root.navigate("liked"); }
+                Rectangle {
+                    border-radius: 8px;
+                    background: (root.active_section == "liked") 
+                        ? #ffffff18 
+                        : (nav_liked.has-hover ? #ffffff0b : transparent);
+                    animate background { duration: 120ms; }
+                    
+                    if (root.active_section == "liked"): Rectangle {
+                        x: 0px;
+                        y: 8px;
+                        width: 3px;
+                        height: parent.height - 16px;
+                        border-radius: 1.5px;
+                        background: root.accent-color;
+                    }
+                    
+                    HorizontalLayout {
+                        height: 36px;
+                        padding-left: 14px;
+                        spacing: 12px;
+                        alignment: center;
+                        
+                        Rectangle {
+                            width: 20px;
+                            height: 20px;
+                            y: (parent.height - self.height) / 2;
+                            
+                            Image {
+                                source: @image-url("assets/icons/heart.svg");
+                                colorize: root.accent-color;
+                                width: 15px;
+                                height: 15px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                            }
+                        }
+                        
+                        Text {
+                            text: "Músicas Curtidas";
+                            color: (root.active_section == "liked") ? #ffffff : (nav_liked.has-hover ? #ffffff : #d1d1d6);
+                            font-size: 13px;
+                            font-weight: (root.active_section == "liked") ? 700 : 500;
+                            y: (parent.height - self.height) / 2;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+        
+        Rectangle { height: 6px; }
+        
+        // Seção Playlists
+        Text {
+            text: "PLAYLISTS";
+            color: #6c6c72;
+            font-size: 11px;
+            font-weight: 700;
+            x: 10px;
+        }
+        
+        ScrollView {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            
+            VerticalLayout {
+                spacing: 2px;
+                for pl in playlists: pl_touch := TouchArea {
+                    height: 30px;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.select_playlist(pl.id);
+                    }
+                    Rectangle {
+                        border-radius: 6px;
+                        background: (root.active_section == pl.id) 
+                            ? Theme.surface-active 
+                            : (pl_touch.has-hover ? Theme.surface-hover : transparent);
+                        animate background { duration: 120ms; }
+                        
+                        if (root.active_section == pl.id): Rectangle {
+                            x: 0px;
+                            y: 6px;
+                            width: 3px;
+                            height: parent.height - 12px;
+                            border-radius: 1.5px;
+                            background: root.accent-color;
+                        }
+                        
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            
+                            Text {
+                                text: pl.name;
+                                color: (root.active_section == pl.id) ? Theme.text-primary : (pl_touch.has-hover ? Theme.text-primary : Theme.text-secondary);
+                                font-size: 13px;
+                                font-weight: (root.active_section == pl.id) ? 700 : 500;
+                                overflow: elide;
+                                vertical-alignment: center;
+                                horizontal-alignment: left;
+                                width: 100%;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
